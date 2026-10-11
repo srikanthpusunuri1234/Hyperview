@@ -22,10 +22,13 @@ Hyperview is a lightweight, polished, open-source image gallery and viewer for L
 
 ## Installation on Arch Linux
 
-# 1. Download or copy PKGBUILD into a clean build directory
+## Download or copy PKGBUILD into a clean build directory
+```
 mkdir -p /tmp/hyperview-build
 curl -sSL [https://raw.githubusercontent.com/srikanthpusunuri1234/Hyperview/main/PKGBUILD](https://raw.githubusercontent.com/srikanthpusunuri1234/Hyperview/main/PKGBUILD) -o /tmp/hyperview-build/PKGBUILD
-
-# 2. Build and install the Arch package
+```
+## Build and install the Arch package
+```
 cd /tmp/hyperview-build
 makepkg -si
+```
