@@ -20,9 +20,12 @@ Hyperview is a lightweight, polished, open-source image gallery and viewer for L
 - `Ctrl + Mouse Scroll`: Zoom In / Out
 - `Double Click`: Toggle Zoom / Fit
 
-## Installation (Arch Linux)
-Clone the repository and build the package using `makepkg`:
-```bash
-git clone https://github.com/srikanthpusunuri1234/Hyperview.git
-cd Hyperview
+## Installation on Arch Linux
+
+# 1. Download or copy PKGBUILD into a clean build directory
+mkdir -p /tmp/hyperview-build
+curl -sSL [https://raw.githubusercontent.com/srikanthpusunuri1234/Hyperview/main/PKGBUILD](https://raw.githubusercontent.com/srikanthpusunuri1234/Hyperview/main/PKGBUILD) -o /tmp/hyperview-build/PKGBUILD
+
+# 2. Build and install the Arch package
+cd /tmp/hyperview-build
 makepkg -si

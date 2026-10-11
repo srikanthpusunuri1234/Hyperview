@@ -12,6 +12,7 @@ use std::cell::RefCell;
 use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::thread;
 
 fn update_status_overlay(state: &GalleryState, status_label: &Label) {
     if let (Some(index), Some(path)) = (state.current_index, state.current_image()) {
@@ -30,6 +31,7 @@ fn load_image_state(
     flowbox: &FlowBox,
     stack: &Stack,
     status_label: &Label,
+    current_load_id: &Rc<RefCell<u64>>,
 ) {
     let images = if let Some(parent) = path.parent() {
         directory_scanner::get_images_in_dir(parent)
@@ -48,12 +50,54 @@ fn load_image_state(
             flowbox.remove(&child);
         }
 
-        for img in &state.borrow().images {
-            let thumb = Picture::builder().width_request(160).height_request(160).can_shrink(true).build();
-            thumb.set_filename(Some(img));
-            let frame = gtk4::Frame::builder().child(&thumb).css_classes(vec!["view"]).build();
-            flowbox.insert(&frame, -1);
-        }
+        // --- MEMORY-OPTIMIZED WORKER PIPELINE ---
+        
+        *current_load_id.borrow_mut() += 1;
+        let active_id = *current_load_id.borrow();
+        
+        let current_idx = state.borrow().current_index.unwrap_or(0);
+        let total = state.borrow().images.len();
+        
+        // Memory Optimization: Only load a sliding window of 100 thumbnails maximum
+        let start_idx = current_idx.saturating_sub(50);
+        let end_idx = (current_idx + 50).min(total);
+        let images_to_load = state.borrow().images[start_idx..end_idx].to_vec();
+        
+        // Use standard Rust MPSC channel to avoid GTK deprecation warnings
+        let (tx, rx) = std::sync::mpsc::channel();
+        
+        thread::spawn(move || {
+            for img in images_to_load {
+                if tx.send(img).is_err() { break; }
+                thread::sleep(std::time::Duration::from_millis(1));
+            }
+        });
+        
+        let flowbox_clone = flowbox.clone();
+        let load_id_clone = current_load_id.clone();
+        
+        // Process the queue on the GTK main thread during idle cycles
+        glib::idle_add_local(move || {
+            if *load_id_clone.borrow() != active_id {
+                return glib::ControlFlow::Break;
+            }
+            
+            // Process up to 3 thumbnails per UI frame to keep animations buttery smooth
+            for _ in 0..3 {
+                match rx.try_recv() {
+                    Ok(img_path) => {
+                        let thumb = Picture::builder().width_request(160).height_request(160).can_shrink(true).build();
+                        thumb.set_filename(Some(&img_path));
+                        let frame = gtk4::Frame::builder().child(&thumb).css_classes(vec!["view"]).build();
+                        flowbox_clone.insert(&frame, -1);
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Empty) => return glib::ControlFlow::Continue,
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => return glib::ControlFlow::Break,
+                }
+            }
+            glib::ControlFlow::Continue
+        });
+
     } else {
         stack.set_visible_child_name("empty");
     }
@@ -112,9 +156,10 @@ pub fn build_ui(app: &Application, initial_file: Option<PathBuf>) {
     let state = Rc::new(RefCell::new(GalleryState::new(vec![], None)));
     let slideshow_active = Rc::new(RefCell::new(false));
     let current_zoom = Rc::new(RefCell::new(1.0));
+    let current_load_id = Rc::new(RefCell::new(0u64));
 
     if let Some(path) = initial_file {
-        load_image_state(path, &state, &viewer_picture, &flowbox, &stack, &status_label);
+        load_image_state(path, &state, &viewer_picture, &flowbox, &stack, &status_label, &current_load_id);
     } else {
         stack.set_visible_child_name("empty");
     }
@@ -127,6 +172,7 @@ pub fn build_ui(app: &Application, initial_file: Option<PathBuf>) {
     let flowbox_c = flowbox.clone();
     let stack_c = stack.clone();
     let label_c = status_label.clone();
+    let load_c = current_load_id.clone();
     
     open_btn.connect_clicked(move |_| {
         let dialog = FileDialog::builder().title("Open Image").build();
@@ -135,11 +181,12 @@ pub fn build_ui(app: &Application, initial_file: Option<PathBuf>) {
         let flowbox_cc = flowbox_c.clone();
         let stack_cc = stack_c.clone();
         let label_cc = label_c.clone();
+        let load_cc = load_c.clone();
         
         dialog.open(Some(&win_clone), gio::Cancellable::NONE, move |res| {
             if let Ok(file) = res {
                 if let Some(path) = file.path() {
-                    load_image_state(path, &state_cc, &viewer_cc, &flowbox_cc, &stack_cc, &label_cc);
+                    load_image_state(path, &state_cc, &viewer_cc, &flowbox_cc, &stack_cc, &label_cc, &load_cc);
                 }
             }
         });
@@ -171,6 +218,7 @@ pub fn build_ui(app: &Application, initial_file: Option<PathBuf>) {
     let flowbox_delete = flowbox.clone();
     let stack_delete = stack.clone();
     let label_delete = status_label.clone();
+    let load_delete = current_load_id.clone();
 
     delete_btn.connect_clicked(move |_| {
         let current_path = state_delete.borrow().current_image().cloned();
@@ -191,12 +239,13 @@ pub fn build_ui(app: &Application, initial_file: Option<PathBuf>) {
             let flowbox_d = flowbox_delete.clone();
             let stack_d = stack_delete.clone();
             let label_d = label_delete.clone();
+            let load_d = load_delete.clone();
             
             dialog.choose(Some(&win_delete), gio::Cancellable::NONE, move |res| {
                 if let Ok(1) = res {
                     if fs::remove_file(&path).is_ok() {
                         let parent = path.parent().unwrap_or(&path).to_path_buf();
-                        load_image_state(parent, &state_d, &viewer_d, &flowbox_d, &stack_d, &label_d);
+                        load_image_state(parent, &state_d, &viewer_d, &flowbox_d, &stack_d, &label_d, &load_d);
                     }
                 }
             });
@@ -205,7 +254,6 @@ pub fn build_ui(app: &Application, initial_file: Option<PathBuf>) {
 
     // --- Mouse Zoom Controls ---
 
-    // Track mouse position continuously
     let mouse_x = Rc::new(RefCell::new(0.0f64));
     let mouse_y = Rc::new(RefCell::new(0.0f64));
     let motion_controller = gtk4::EventControllerMotion::new();
@@ -218,7 +266,6 @@ pub fn build_ui(app: &Application, initial_file: Option<PathBuf>) {
     });
     viewer_overlay.add_controller(motion_controller);
 
-    // Helper to calculate and apply pointer-centric zoom
     let apply_pointer_zoom = {
         let pic = viewer_picture.clone();
         let scroll_win = viewer_scrolled.clone();
@@ -229,31 +276,25 @@ pub fn build_ui(app: &Application, initial_file: Option<PathBuf>) {
             let hadj = scroll_win.hadjustment();
             let vadj = scroll_win.vadjustment();
             
-            // Current viewport and pointer data
             let old_width = pic.width() as f64;
             let old_height = pic.height() as f64;
             let pointer_x = *mx.borrow();
             let pointer_y = *my.borrow();
             
-            // Calculate proportional position of the pointer
             let relative_x = (hadj.value() + pointer_x) / old_width.max(1.0);
             let relative_y = (vadj.value() + pointer_y) / old_height.max(1.0);
 
-            // Apply the zoom state
             if zooming_in {
-                pic.set_can_shrink(false); // Zoom to native/expanded size
+                pic.set_can_shrink(false); 
             } else {
-                pic.set_can_shrink(true);  // Fit to window
+                pic.set_can_shrink(true);  
             }
 
             let pic_clone = pic.clone();
-            // GTK recalculates layout asynchronously. We must wait until the next idle frame 
-            // when the new dimensions are known, to adjust the scrollbars.
             glib::idle_add_local(move || {
                 let new_width = pic_clone.width() as f64;
                 let new_height = pic_clone.height() as f64;
                 
-                // Only shift scrollbars if the size actually changed
                 if (new_width - old_width).abs() > 1.0 || (new_height - old_height).abs() > 1.0 {
                     let target_x = (new_width * relative_x) - pointer_x;
                     let target_y = (new_height * relative_y) - pointer_y;
@@ -266,7 +307,6 @@ pub fn build_ui(app: &Application, initial_file: Option<PathBuf>) {
         }
     };
 
-    // 1. Ctrl + Scroll
     let scroll_controller = EventControllerScroll::new(EventControllerScrollFlags::VERTICAL);
     let zoom_apply_scroll = apply_pointer_zoom.clone();
     
@@ -274,16 +314,15 @@ pub fn build_ui(app: &Application, initial_file: Option<PathBuf>) {
         let state = ctrl.current_event_state();
         if state.contains(gtk4::gdk::ModifierType::CONTROL_MASK) {
             if dy < 0.0 {
-                zoom_apply_scroll(true); // Scroll up -> Zoom in
+                zoom_apply_scroll(true); 
             } else if dy > 0.0 {
-                zoom_apply_scroll(false); // Scroll down -> Fit to window
+                zoom_apply_scroll(false); 
             }
             return glib::Propagation::Stop;
         }
         glib::Propagation::Proceed
     });
 
-    // 2. Double Click
     let click_gesture = GestureClick::new();
     click_gesture.set_button(0);
     let zoom_apply_click = apply_pointer_zoom.clone();
@@ -291,7 +330,6 @@ pub fn build_ui(app: &Application, initial_file: Option<PathBuf>) {
     
     click_gesture.connect_pressed(move |_gesture, n_press, _x, _y| {
         if n_press == 2 {
-            // Toggle between native size (zoomed) and fit-to-window
             let currently_zoomed = !pic_click.can_shrink();
             zoom_apply_click(!currently_zoomed);
         }
@@ -299,7 +337,7 @@ pub fn build_ui(app: &Application, initial_file: Option<PathBuf>) {
 
     viewer_overlay.add_controller(scroll_controller);
     viewer_overlay.add_controller(click_gesture);
-    
+
     // --- Keyboard Navigation ---
 
     let key_controller = EventControllerKey::new();
