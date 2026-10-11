@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#4a4a4a"/>
+      <stop offset="100%" stop-color="#242424"/>
+    </linearGradient>
+    
+    <!-- Sun Gradient -->
+    <linearGradient id="sun-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff7800"/>
+      <stop offset="100%" stop-color="#e66100"/>
+    </linearGradient>
+    
+    <!-- Mountain Gradient -->
+    <linearGradient id="mountain-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#3584e4"/>
+      <stop offset="100%" stop-color="#1a5fb4"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Outer App Squircle Base -->
+  <rect x="12" y="12" width="104" height="104" rx="24" fill="url(#bg-grad)" stroke="#1a1a1a" stroke-width="1.5"/>
+  <rect x="13" y="13" width="102" height="102" rx="23" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+  
+  <!-- Photo Frame -->
+  <rect x="24" y="28" width="80" height="72" rx="8" fill="#f6f5f4" />
+  
+  <!-- Image Canvas Area -->
+  <rect x="28" y="32" width="72" height="64" rx="4" fill="#deddda" />
+  
+  <!-- Sun -->
+  <circle cx="76" cy="52" r="10" fill="url(#sun-grad)"/>
+  
+  <!-- Mountains -->
+  <path d="M 28 96 L 56 60 L 72 80 L 84 64 L 100 96 Z" fill="url(#mountain-grad)"/>
+  
+  <!-- Glass Reflection Overlay -->
+  <path d="M 24 28 L 64 28 L 24 68 Z" fill="rgba(255,255,255,0.5)" />
+</svg>

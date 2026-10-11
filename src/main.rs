@@ -15,7 +15,7 @@ use libadwaita::Application;
 fn main() {
     // Initialize Libadwaita application with HANDLES_OPEN flag
     let app = Application::builder()
-        .application_id("org.pixora.Gallery")
+        .application_id("org.hyperview.Gallery")
         .flags(ApplicationFlags::HANDLES_OPEN)
         .build();
 

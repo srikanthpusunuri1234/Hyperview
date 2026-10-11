@@ -1,5 +1,5 @@
 [package]
-name = "pixora"
+name = "Hyperview"
 version = "0.1.0"
 edition = "2021"
 description = "A lightweight, polished, open-source image gallery and viewer for Linux"
