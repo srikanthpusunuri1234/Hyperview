@@ -11,12 +11,14 @@ source=("$pkgname-$pkgver.tar.gz::https://github.com/srikanthpusunuri1234/Hyperv
 sha256sums=('SKIP')
 
 build() {
-  cd "$pkgname-$pkgver"
+  # Note the capital H here to match GitHub's extracted folder name
+  cd "Hyperview-$pkgver"
   cargo build --release --locked
 }
 
 package() {
-  cd "$pkgname-$pkgver"
+  # Note the capital H here as well
+  cd "Hyperview-$pkgver"
   
   # Install the executable
   install -Dm755 "target/release/hyperview" "$pkgdir/usr/bin/hyperview"

@@ -1,5 +1,5 @@
 [package]
-name = "Hyperview"
+name = "hyperview"
 version = "0.1.0"
 edition = "2021"
 description = "A lightweight, polished, open-source image gallery and viewer for Linux"
@@ -12,3 +12,5 @@ walkdir = "2.4"
 
 [dev-dependencies]
 tempfile = "3.8"
+
+[workspace]
